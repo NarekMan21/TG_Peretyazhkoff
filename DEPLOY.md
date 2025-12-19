@@ -2,7 +2,7 @@
 
 ## Шаг 1: Создайте репозиторий на GitHub
 
-1. Откройте https://github.com/new (должен открыться автоматически)
+1. Откройте https://github.com/new
 2. Заполните форму:
    - **Repository name:** `TG_Peretyazhkoff`
    - **Description:** `Telegram bot for Peretyazhkoff - furniture reupholstery lead collection`
@@ -12,7 +12,21 @@
 
 ## Шаг 2: Подключите локальный репозиторий
 
-После создания репозитория выполните в терминале:
+### Вариант 1: Автоматически (рекомендуется)
+
+Запустите скрипт:
+```powershell
+.\push_to_github.ps1
+```
+
+Скрипт автоматически:
+- Подключит remote репозиторий
+- Переименует ветку в `main` если нужно
+- Отправит код на GitHub
+
+### Вариант 2: Вручную
+
+Выполните команды в терминале:
 
 ```bash
 # Подключите удаленный репозиторий
@@ -23,18 +37,11 @@ git remote set-url origin https://github.com/NarekMan21/TG_Peretyazhkoff.git
 
 # Проверьте подключение
 git remote -v
-```
 
-## Шаг 3: Отправьте код на GitHub
-
-```bash
-# Отправьте все коммиты
-git push -u origin main
-```
-
-Если возникнет ошибка, возможно нужно переименовать ветку:
-```bash
+# Переименуйте ветку в main если нужно
 git branch -M main
+
+# Отправьте все коммиты
 git push -u origin main
 ```
 
@@ -56,4 +63,3 @@ git push -u origin main
 1. Немедленно отзовите токен через @BotFather
 2. Создайте новый токен
 3. Обновите `.env` файл
-
