@@ -24,6 +24,12 @@ def create_admin_app():
         conn.row_factory = sqlite3.Row
         return conn
     
+    @app.route('/')
+    def root():
+        """Редирект с корня на админ-панель"""
+        from flask import redirect
+        return redirect('/admin')
+    
     @app.route('/admin')
     def index():
         """Главная страница - список заявок"""

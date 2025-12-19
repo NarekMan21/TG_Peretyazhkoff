@@ -1,8 +1,0 @@
-Host cloud-ru-vm
-    HostName 176.108.253.113
-    User user1
-    IdentityFile ~/.ssh/id_ed25519
-    IdentitiesOnly yes
-    ServerAliveInterval 60
-    ServerAliveCountMax 3
-
