@@ -1,7 +1,7 @@
-# Python
+﻿# Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.class
 *.so
 .Python
 venv/
@@ -11,13 +11,11 @@ ENV/
 # Environment variables
 .env
 .env.local
-bot/.env
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
-bot/bot.db
 
 # IDE
 .vscode/
@@ -31,7 +29,3 @@ bot/bot.db
 # OS
 .DS_Store
 Thumbs.db
-
-# Заметки
-заметка
-
