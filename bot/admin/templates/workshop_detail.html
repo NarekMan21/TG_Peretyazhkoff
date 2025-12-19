@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Пост "из цеха" #{{ post.id }} - Админ-панель Перетяжкофф{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 20px;">
+    <a href="/admin/workshop" class="btn" style="background: #95a5a6;">← Назад к списку</a>
+</div>
+
+<div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px;">
+    <h2>{{ post.title }}</h2>
+    
+    <div style="margin-top: 20px;">
+        {% if post.description %}
+        <div style="margin-bottom: 15px;">
+            <strong>Описание:</strong>
+            <p style="margin-top: 5px; color: #666;">{{ post.description }}</p>
+        </div>
+        {% endif %}
+        
+        <div style="margin-bottom: 15px;">
+            <strong>Тип медиа:</strong>
+            {% if post.media_type == 'video' %}
+                <span class="badge" style="background: #9b59b6; color: white;">Видео</span>
+            {% else %}
+                <span class="badge" style="background: #3498db; color: white;">Фото</span>
+            {% endif %}
+        </div>
+        
+        {% if post.media_file_id %}
+        <div style="margin-bottom: 15px;">
+            <strong>File ID:</strong>
+            <code style="background: #f5f5f5; padding: 5px; border-radius: 4px; display: block; margin-top: 5px;">{{ post.media_file_id }}</code>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+            <strong>Предпросмотр:</strong>
+            <div style="margin-top: 10px;">
+                {% if post.media_type == 'video' %}
+                    <p style="color: #666;">Видео будет отображаться в канале</p>
+                {% else %}
+                    <img src="/admin/api/photo?id={{ post.media_file_id|urlencode }}" alt="Медиа" style="max-width: 400px; border-radius: 4px;">
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <div style="margin-bottom: 15px;">
+            <strong>Статус:</strong>
+            {% if post.published %}
+                <span class="badge" style="background: #27ae60; color: white;">Опубликован</span>
+                {% if post.published_at %}
+                    <small style="color: #666; margin-left: 10px;">{{ post.published_at }}</small>
+                {% endif %}
+            {% else %}
+                <span class="badge" style="background: #e74c3c; color: white;">Не опубликован</span>
+            {% endif %}
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+            <strong>Дата создания:</strong> {{ post.created_at }}
+        </div>
+    </div>
+</div>
+
+<div style="display: flex; gap: 10px;">
+    {% if not post.published %}
+        <button onclick="publishPost({{ post.id }})" class="btn" style="background: #27ae60;">Опубликовать в канал</button>
+    {% endif %}
+    <form method="POST" action="/admin/workshop/{{ post.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить этот пост?');">
+        <button type="submit" class="btn" style="background: #e74c3c;">Удалить</button>
+    </form>
+</div>
+
+<script>
+function publishPost(postId) {
+    if (!confirm('Опубликовать этот пост в канал?')) {
+        return;
+    }
+    
+    fetch(`/admin/workshop/${postId}/publish`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Пост успешно опубликован!');
+            location.reload();
+        } else {
+            alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    })
+    .catch(error => {
+        alert('Ошибка: ' + error);
+    });
+}
+</script>
+{% endblock %}

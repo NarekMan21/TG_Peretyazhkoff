@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Админ-панель Перетяжкофф{% endblock %}</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛋️</text></svg>">
     <style>
         * {
             margin: 0;
@@ -124,6 +125,11 @@
     <header>
         <div class="container">
             <h1>Админ-панель Перетяжкофф</h1>
+            <nav style="margin-top: 15px;">
+                <a href="/admin" class="btn" style="margin-right: 10px;">Заявки</a>
+                <a href="/admin/cases" class="btn" style="margin-right: 10px;">Кейсы</a>
+                <a href="/admin/workshop" class="btn" style="margin-right: 10px;">Из цеха</a>
+            </nav>
         </div>
     </header>
     <div class="container">

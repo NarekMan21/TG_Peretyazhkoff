@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Посты "из цеха" - Админ-панель Перетяжкофф{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 20px;">
+    <a href="/admin/workshop/new" class="btn">+ Создать пост</a>
+</div>
+
+<div class="stat-card" style="margin-bottom: 20px;">
+    <h3>Всего постов</h3>
+    <div class="value">{{ total }}</div>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Название</th>
+            <th>Тип медиа</th>
+            <th>Опубликован</th>
+            <th>Дата создания</th>
+            <th>Действия</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for post in posts %}
+        <tr>
+            <td>#{{ post.id }}</td>
+            <td>{{ post.title }}</td>
+            <td>
+                {% if post.media_type == 'video' %}
+                    <span class="badge" style="background: #9b59b6; color: white;">Видео</span>
+                {% else %}
+                    <span class="badge" style="background: #3498db; color: white;">Фото</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if post.published %}
+                    <span class="badge" style="background: #27ae60; color: white;">Да</span>
+                {% else %}
+                    <span class="badge" style="background: #e74c3c; color: white;">Нет</span>
+                {% endif %}
+            </td>
+            <td>{{ post.created_at }}</td>
+            <td>
+                <a href="/admin/workshop/{{ post.id }}" class="btn" style="padding: 5px 10px; font-size: 12px; margin-right: 5px;">Подробнее</a>
+                {% if not post.published %}
+                    <button onclick="publishPost({{ post.id }})" class="btn" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; background: #27ae60;">Опубликовать</button>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="6" style="text-align: center; padding: 40px;">
+                Постов пока нет. <a href="/admin/workshop/new">Создать первый пост</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+        <a href="?page={{ page - 1 }}">← Назад</a>
+    {% endif %}
+    
+    <span>Страница {{ page }} из {{ total_pages }}</span>
+    
+    {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}">Вперёд →</a>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+function publishPost(postId) {
+    if (!confirm('Опубликовать этот пост в канал?')) {
+        return;
+    }
+    
+    fetch(`/admin/workshop/${postId}/publish`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Пост успешно опубликован!');
+            location.reload();
+        } else {
+            alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    })
+    .catch(error => {
+        alert('Ошибка: ' + error);
+    });
+}
+</script>
+{% endblock %}

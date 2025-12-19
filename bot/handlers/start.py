@@ -17,6 +17,10 @@ router = Router()
 @router.message(F.text == "/start")
 async def cmd_start(message: Message, state: FSMContext):
     """Обработчик команды /start"""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Получена команда /start от пользователя {message.from_user.id}")
+    
     await state.set_state(OrderStates.start)
     await message.answer(
         START_MESSAGE,

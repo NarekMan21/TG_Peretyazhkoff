@@ -30,6 +30,10 @@ ITEM_TYPES = [
 @router.message(OrderStates.choose_item_type, F.text.in_(ITEM_TYPES))
 async def process_item_type(message: Message, state: FSMContext):
     """Обработка выбора типа мебели"""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Обработка выбора типа мебели: {message.text} от пользователя {message.from_user.id}")
+    
     item_type = message.text
     await state.update_data(item_type=item_type)
     await state.set_state(OrderStates.ask_photos)

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Кейс #{{ case.id }} - Админ-панель Перетяжкофф{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 20px;">
+    <a href="/admin/cases" class="btn" style="background: #95a5a6;">← Назад к списку</a>
+</div>
+
+<div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px;">
+    <h2>{{ case.title }}</h2>
+    
+    <div style="margin-top: 20px;">
+        {% if case.description_before %}
+        <div style="margin-bottom: 15px;">
+            <strong>Что было:</strong>
+            <p style="margin-top: 5px; color: #666;">{{ case.description_before }}</p>
+        </div>
+        {% endif %}
+        
+        {% if case.description_after %}
+        <div style="margin-bottom: 15px;">
+            <strong>Что сделали:</strong>
+            <p style="margin-top: 5px; color: #666;">{{ case.description_after }}</p>
+        </div>
+        {% endif %}
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+            {% if case.fabric_type %}
+            <div>
+                <strong>Ткань:</strong> {{ case.fabric_type }}
+            </div>
+            {% endif %}
+            
+            {% if case.filler_type %}
+            <div>
+                <strong>Наполнитель:</strong> {{ case.filler_type }}
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if case.price %}
+        <div style="margin-bottom: 15px;">
+            <strong>Стоимость:</strong> {{ "%.0f"|format(case.price) }} ₽
+        </div>
+        {% endif %}
+        
+        {% if case.client_review %}
+        <div style="margin-bottom: 15px;">
+            <strong>Отзыв клиента:</strong>
+            <p style="margin-top: 5px; color: #666; font-style: italic;">«{{ case.client_review }}»</p>
+        </div>
+        {% endif %}
+        
+        <div style="margin-bottom: 15px;">
+            <strong>Статус:</strong>
+            {% if case.published %}
+                <span class="badge" style="background: #27ae60; color: white;">Опубликован</span>
+                {% if case.published_at %}
+                    <small style="color: #666; margin-left: 10px;">{{ case.published_at }}</small>
+                {% endif %}
+            {% else %}
+                <span class="badge" style="background: #e74c3c; color: white;">Не опубликован</span>
+            {% endif %}
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+            <strong>Дата создания:</strong> {{ case.created_at }}
+        </div>
+    </div>
+</div>
+
+{% if photos %}
+<div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px;">
+    <h3>Фото</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+        {% for photo in photos %}
+        <div>
+            <img src="/admin/api/photo?id={{ photo|urlencode }}" alt="Фото {{ loop.index }}" style="width: 100%; border-radius: 4px;">
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div style="display: flex; gap: 10px;">
+    {% if not case.published %}
+        <button onclick="publishCase({{ case.id }})" class="btn" style="background: #27ae60;">Опубликовать в канал</button>
+    {% endif %}
+    <form method="POST" action="/admin/cases/{{ case.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить этот кейс?');">
+        <button type="submit" class="btn" style="background: #e74c3c;">Удалить</button>
+    </form>
+</div>
+
+<script>
+function publishCase(caseId) {
+    if (!confirm('Опубликовать этот кейс в канал?')) {
+        return;
+    }
+    
+    fetch(`/admin/cases/${caseId}/publish`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Кейс успешно опубликован!');
+            location.reload();
+        } else {
+            alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    })
+    .catch(error => {
+        alert('Ошибка: ' + error);
+    });
+}
+</script>
+{% endblock %}

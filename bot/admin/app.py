@@ -1,5 +1,5 @@
 """Flask приложение для админ-панели"""
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, flash
 import sqlite3
 import json
 from datetime import datetime
@@ -8,9 +8,11 @@ import os
 import requests
 import io
 import base64
+import asyncio
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import DB_PATH, BOT_TOKEN
+from content_publisher import publish_case_to_channel, publish_workshop_post_to_channel
 
 def create_admin_app():
     """Создать Flask приложение для админ-панели"""
@@ -29,6 +31,16 @@ def create_admin_app():
         """Редирект с корня на админ-панель"""
         from flask import redirect
         return redirect('/admin')
+    
+    @app.route('/favicon.ico')
+    def favicon():
+        """Возвращает favicon"""
+        # Простой SVG favicon с эмодзи дивана
+        from flask import Response
+        svg_icon = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+            <text y="0.9em" font-size="90">🛋️</text>
+        </svg>'''
+        return Response(svg_icon, mimetype='image/svg+xml')
     
     @app.route('/admin')
     def index():
@@ -166,6 +178,221 @@ def create_admin_app():
             'by_type': {row[0]: row[1] for row in by_type},
             'by_date': [{'date': row[0], 'count': row[1]} for row in by_date]
         })
+    
+    # ========== Роуты для работы с кейсами ==========
+    
+    @app.route('/admin/cases')
+    def cases_list():
+        """Список кейсов"""
+        conn = get_db_connection()
+        
+        page = request.args.get('page', 1, type=int)
+        per_page = 20
+        offset = (page - 1) * per_page
+        
+        cases = conn.execute("""
+            SELECT * FROM cases 
+            ORDER BY created_at DESC 
+            LIMIT ? OFFSET ?
+        """, (per_page, offset)).fetchall()
+        
+        total = conn.execute("SELECT COUNT(*) FROM cases").fetchone()[0]
+        total_pages = (total + per_page - 1) // per_page
+        
+        conn.close()
+        
+        return render_template('cases.html',
+                             cases=cases,
+                             page=page,
+                             total_pages=total_pages,
+                             total=total)
+    
+    @app.route('/admin/cases/new', methods=['GET', 'POST'])
+    def case_new():
+        """Создать новый кейс"""
+        if request.method == 'POST':
+            conn = get_db_connection()
+            
+            # Обработка фото - разбиваем по строкам и фильтруем пустые
+            photos_text = request.form.get('photos', '')
+            photos_list = [p.strip() for p in photos_text.split('\n') if p.strip()]
+            photos_json = json.dumps(photos_list)
+            created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            conn.execute("""
+                INSERT INTO cases (
+                    title, description_before, description_after,
+                    fabric_type, filler_type, price, client_review,
+                    photos, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                request.form['title'],
+                request.form.get('description_before', ''),
+                request.form.get('description_after', ''),
+                request.form.get('fabric_type', ''),
+                request.form.get('filler_type', ''),
+                float(request.form['price']) if request.form.get('price') else None,
+                request.form.get('client_review', ''),
+                photos_json,
+                created_at
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+            return redirect(url_for('cases_list'))
+        
+        return render_template('case_form.html')
+    
+    @app.route('/admin/cases/<int:case_id>')
+    def case_detail(case_id):
+        """Детальная страница кейса"""
+        conn = get_db_connection()
+        case = conn.execute("""
+            SELECT * FROM cases WHERE id = ?
+        """, (case_id,)).fetchone()
+        conn.close()
+        
+        if not case:
+            return "Кейс не найден", 404
+        
+        photos = json.loads(case['photos']) if case['photos'] else []
+        
+        return render_template('case_detail.html',
+                             case=case,
+                             photos=photos)
+    
+    @app.route('/admin/cases/<int:case_id>/publish', methods=['POST'])
+    def case_publish(case_id):
+        """Опубликовать кейс в канал"""
+        try:
+            # Публикуем в канал
+            message_id = asyncio.run(publish_case_to_channel(case_id))
+            
+            if message_id:
+                # Отмечаем как опубликованный в БД
+                conn = get_db_connection()
+                published_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                conn.execute("""
+                    UPDATE cases SET published = 1, published_at = ? WHERE id = ?
+                """, (published_at, case_id))
+                conn.commit()
+                conn.close()
+                
+                return jsonify({'success': True, 'message_id': message_id})
+            else:
+                return jsonify({'success': False, 'error': 'Ошибка публикации'}), 500
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/admin/cases/<int:case_id>/delete', methods=['POST'])
+    def case_delete(case_id):
+        """Удалить кейс"""
+        conn = get_db_connection()
+        conn.execute("DELETE FROM cases WHERE id = ?", (case_id,))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('cases_list'))
+    
+    # ========== Роуты для работы с постами "из цеха" ==========
+    
+    @app.route('/admin/workshop')
+    def workshop_list():
+        """Список постов из цеха"""
+        conn = get_db_connection()
+        
+        page = request.args.get('page', 1, type=int)
+        per_page = 20
+        offset = (page - 1) * per_page
+        
+        posts = conn.execute("""
+            SELECT * FROM workshop_posts 
+            ORDER BY created_at DESC 
+            LIMIT ? OFFSET ?
+        """, (per_page, offset)).fetchall()
+        
+        total = conn.execute("SELECT COUNT(*) FROM workshop_posts").fetchone()[0]
+        total_pages = (total + per_page - 1) // per_page
+        
+        conn.close()
+        
+        return render_template('workshop_posts.html',
+                             posts=posts,
+                             page=page,
+                             total_pages=total_pages,
+                             total=total)
+    
+    @app.route('/admin/workshop/new', methods=['GET', 'POST'])
+    def workshop_new():
+        """Создать новый пост из цеха"""
+        if request.method == 'POST':
+            conn = get_db_connection()
+            created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            conn.execute("""
+                INSERT INTO workshop_posts (
+                    title, description, media_type, media_file_id, created_at
+                ) VALUES (?, ?, ?, ?, ?)
+            """, (
+                request.form['title'],
+                request.form.get('description', ''),
+                request.form.get('media_type', 'photo'),
+                request.form.get('media_file_id', ''),
+                created_at
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+            return redirect(url_for('workshop_list'))
+        
+        return render_template('workshop_form.html')
+    
+    @app.route('/admin/workshop/<int:post_id>')
+    def workshop_detail(post_id):
+        """Детальная страница поста из цеха"""
+        conn = get_db_connection()
+        post = conn.execute("""
+            SELECT * FROM workshop_posts WHERE id = ?
+        """, (post_id,)).fetchone()
+        conn.close()
+        
+        if not post:
+            return "Пост не найден", 404
+        
+        return render_template('workshop_detail.html', post=post)
+    
+    @app.route('/admin/workshop/<int:post_id>/publish', methods=['POST'])
+    def workshop_publish(post_id):
+        """Опубликовать пост "из цеха" в канал"""
+        try:
+            # Публикуем в канал
+            message_id = asyncio.run(publish_workshop_post_to_channel(post_id))
+            
+            if message_id:
+                # Отмечаем как опубликованный в БД
+                conn = get_db_connection()
+                published_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                conn.execute("""
+                    UPDATE workshop_posts SET published = 1, published_at = ? WHERE id = ?
+                """, (published_at, post_id))
+                conn.commit()
+                conn.close()
+                
+                return jsonify({'success': True, 'message_id': message_id})
+            else:
+                return jsonify({'success': False, 'error': 'Ошибка публикации'}), 500
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/admin/workshop/<int:post_id>/delete', methods=['POST'])
+    def workshop_delete(post_id):
+        """Удалить пост из цеха"""
+        conn = get_db_connection()
+        conn.execute("DELETE FROM workshop_posts WHERE id = ?", (post_id,))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('workshop_list'))
     
     return app
 

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Кейсы - Админ-панель Перетяжкофф{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 20px;">
+    <a href="/admin/cases/new" class="btn">+ Создать кейс</a>
+</div>
+
+<div class="stat-card" style="margin-bottom: 20px;">
+    <h3>Всего кейсов</h3>
+    <div class="value">{{ total }}</div>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Название</th>
+            <th>Цена</th>
+            <th>Опубликован</th>
+            <th>Дата создания</th>
+            <th>Действия</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for case in cases %}
+        <tr>
+            <td>#{{ case.id }}</td>
+            <td>{{ case.title }}</td>
+            <td>
+                {% if case.price %}
+                    {{ "%.0f"|format(case.price) }} ₽
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+            <td>
+                {% if case.published %}
+                    <span class="badge" style="background: #27ae60; color: white;">Да</span>
+                {% else %}
+                    <span class="badge" style="background: #e74c3c; color: white;">Нет</span>
+                {% endif %}
+            </td>
+            <td>{{ case.created_at }}</td>
+            <td>
+                <a href="/admin/cases/{{ case.id }}" class="btn" style="padding: 5px 10px; font-size: 12px; margin-right: 5px;">Подробнее</a>
+                {% if not case.published %}
+                    <button onclick="publishCase({{ case.id }})" class="btn" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; background: #27ae60;">Опубликовать</button>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="6" style="text-align: center; padding: 40px;">
+                Кейсов пока нет. <a href="/admin/cases/new">Создать первый кейс</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+        <a href="?page={{ page - 1 }}">← Назад</a>
+    {% endif %}
+    
+    <span>Страница {{ page }} из {{ total_pages }}</span>
+    
+    {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}">Вперёд →</a>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+function publishCase(caseId) {
+    if (!confirm('Опубликовать этот кейс в канал?')) {
+        return;
+    }
+    
+    fetch(`/admin/cases/${caseId}/publish`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Кейс успешно опубликован!');
+            location.reload();
+        } else {
+            alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    })
+    .catch(error => {
+        alert('Ошибка: ' + error);
+    });
+}
+</script>
+{% endblock %}

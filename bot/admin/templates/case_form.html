@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Создать кейс - Админ-панель Перетяжкофф{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom: 20px;">Создать новый кейс</h2>
+
+<form method="POST" style="max-width: 800px;">
+    <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Название кейса *</label>
+        <input type="text" name="title" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Что было (описание до)</label>
+        <textarea name="description_before" rows="4" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Что сделали (описание после)</label>
+        <textarea name="description_after" rows="4" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+        <div>
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Тип ткани</label>
+            <input type="text" name="fabric_type" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+        
+        <div>
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Тип наполнителя</label>
+            <input type="text" name="filler_type" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Стоимость (₽)</label>
+        <input type="number" name="price" step="0.01" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Отзыв клиента</label>
+        <textarea name="client_review" rows="3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Фото (file_id из Telegram, по одному на строку)</label>
+        <textarea name="photos" rows="5" placeholder="file_id1&#10;file_id2&#10;file_id3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace;"></textarea>
+        <small style="color: #666;">Введите file_id фото из Telegram (по одному на строку). Можно получить через бота, отправив фото.</small>
+    </div>
+    
+    <div style="display: flex; gap: 10px;">
+        <button type="submit" class="btn">Создать кейс</button>
+        <a href="/admin/cases" class="btn" style="background: #95a5a6;">Отмена</a>
+    </div>
+</form>
+{% endblock %}

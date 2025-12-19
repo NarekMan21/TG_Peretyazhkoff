@@ -14,7 +14,7 @@ from aiogram.enums import ParseMode
 
 from config import BOT_TOKEN, ADMIN_PORT
 from database import init_db
-from handlers import start, common, order
+from handlers import start, common, order, fallback
 from admin.app import create_admin_app
 
 # Настройка логирования
@@ -38,10 +38,12 @@ async def main():
     )
     dp = Dispatcher(storage=MemoryStorage())
     
-    # Регистрация роутеров
+    # Регистрация роутеров (важен порядок - более специфичные первыми)
     dp.include_router(start.router)
     dp.include_router(common.router)
     dp.include_router(order.router)
+    # Fallback роутер должен быть последним
+    dp.include_router(fallback.router)
     
     logger.info("Бот запущен и готов к работе!")
     

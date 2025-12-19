@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Создать пост "из цеха" - Админ-панель Перетяжкофф{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom: 20px;">Создать новый пост "из цеха"</h2>
+
+<form method="POST" style="max-width: 800px;">
+    <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Название поста *</label>
+        <input type="text" name="title" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Описание</label>
+        <textarea name="description" rows="4" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Тип медиа</label>
+        <select name="media_type" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <option value="photo">Фото</option>
+            <option value="video">Видео</option>
+        </select>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">File ID медиа из Telegram</label>
+        <input type="text" name="media_file_id" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace;">
+        <small style="color: #666;">Введите file_id фото или видео из Telegram. Можно получить через бота, отправив медиа.</small>
+    </div>
+    
+    <div style="display: flex; gap: 10px;">
+        <button type="submit" class="btn">Создать пост</button>
+        <a href="/admin/workshop" class="btn" style="background: #95a5a6;">Отмена</a>
+    </div>
+</form>
+{% endblock %}
