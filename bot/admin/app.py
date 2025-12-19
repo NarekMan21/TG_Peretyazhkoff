@@ -11,7 +11,7 @@ import base64
 import asyncio
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import DB_PATH, BOT_TOKEN
+from config import DB_PATH, BOT_TOKEN, MANAGER_CHAT_ID
 from content_publisher import publish_case_to_channel, publish_workshop_post_to_channel
 
 def create_admin_app():
@@ -184,6 +184,90 @@ def create_admin_app():
             </svg>'''
             return Response(placeholder_svg, mimetype='image/svg+xml')
     
+    @app.route('/admin/api/upload-photo', methods=['POST'])
+    def upload_photo():
+        """Загрузить фото/видео и получить file_id от бота"""
+        if 'photo' not in request.files:
+            return jsonify({'success': False, 'error': 'Файл не выбран'}), 400
+        
+        file = request.files['photo']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'Файл не выбран'}), 400
+        
+        # Проверяем тип файла
+        is_video = file.content_type and file.content_type.startswith('video/')
+        is_image = file.content_type and file.content_type.startswith('image/')
+        
+        if not is_image and not is_video:
+            return jsonify({'success': False, 'error': 'Файл должен быть изображением или видео'}), 400
+        
+        try:
+            # Сохраняем файл во временную директорию
+            import tempfile
+            import os
+            from werkzeug.utils import secure_filename
+            
+            # Создаем временный файл
+            temp_dir = tempfile.gettempdir()
+            filename = secure_filename(file.filename)
+            temp_path = os.path.join(temp_dir, filename)
+            file.save(temp_path)
+            
+            try:
+                file_id = None
+                
+                if is_video:
+                    # Отправляем видео боту в чат менеджера для получения file_id
+                    send_video_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
+                    
+                    with open(temp_path, 'rb') as video_file:
+                        files = {'video': (filename, video_file, file.content_type)}
+                        data = {'chat_id': MANAGER_CHAT_ID}
+                        
+                        response = requests.post(send_video_url, files=files, data=data, timeout=60)
+                        result = response.json()
+                    
+                    if result.get('ok') and result.get('result'):
+                        # Получаем file_id из ответа
+                        video_data = result['result'].get('video')
+                        if video_data:
+                            file_id = video_data.get('file_id')
+                else:
+                    # Отправляем фото боту в чат менеджера для получения file_id
+                    send_photo_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+                    
+                    with open(temp_path, 'rb') as photo_file:
+                        files = {'photo': (filename, photo_file, file.content_type)}
+                        data = {'chat_id': MANAGER_CHAT_ID}
+                        
+                        response = requests.post(send_photo_url, files=files, data=data, timeout=30)
+                        result = response.json()
+                    
+                    if result.get('ok') and result.get('result'):
+                        # Получаем file_id из ответа
+                        photo_data = result['result'].get('photo', [])
+                        if photo_data:
+                            # Берем самое большое фото (последнее в массиве)
+                            file_id = photo_data[-1].get('file_id')
+                
+                # Удаляем временный файл
+                os.remove(temp_path)
+                
+                if file_id:
+                    return jsonify({'success': True, 'file_id': file_id})
+                else:
+                    error_description = result.get('description', 'Не удалось получить file_id из ответа бота')
+                    return jsonify({'success': False, 'error': f'Ошибка Telegram API: {error_description}'}), 500
+                    
+            except Exception as e:
+                # Удаляем временный файл в случае ошибки
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                raise e
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/admin/api/stats')
     def api_stats():
         """API для получения статистики"""
@@ -303,22 +387,19 @@ def create_admin_app():
     def case_publish(case_id):
         """Опубликовать кейс в канал"""
         try:
-            # Проверяем, есть ли запущенный event loop
+            # Создаем новый event loop для этого запроса
+            # Это безопасно, так как Flask работает в синхронном контексте
             try:
                 loop = asyncio.get_event_loop()
+                if loop.is_closed():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
-            # Если loop уже запущен, используем create_task
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, publish_case_to_channel(case_id))
-                    message_id = future.result(timeout=30)
-            else:
-                # Если loop не запущен, используем run
-                message_id = asyncio.run(publish_case_to_channel(case_id))
+            # Запускаем асинхронную функцию
+            message_id = loop.run_until_complete(publish_case_to_channel(case_id))
             
             if message_id:
                 # Отмечаем как опубликованный в БД
@@ -332,11 +413,11 @@ def create_admin_app():
                 
                 return jsonify({'success': True, 'message_id': message_id})
             else:
-                return jsonify({'success': False, 'error': 'Ошибка публикации. Проверьте логи и настройки канала.'}), 500
+                return jsonify({'success': False, 'error': 'Ошибка публикации. Проверьте логи и настройки канала (CHANNEL_ID, права бота).'}), 500
         except Exception as e:
             import traceback
             error_trace = traceback.format_exc()
-            return jsonify({'success': False, 'error': f'{str(e)}\n{error_trace}'}), 500
+            return jsonify({'success': False, 'error': f'{str(e)}'}), 500
     
     @app.route('/admin/cases/<int:case_id>/delete', methods=['POST'])
     def case_delete(case_id):
@@ -419,22 +500,19 @@ def create_admin_app():
     def workshop_publish(post_id):
         """Опубликовать пост "из цеха" в канал"""
         try:
-            # Проверяем, есть ли запущенный event loop
+            # Создаем новый event loop для этого запроса
+            # Это безопасно, так как Flask работает в синхронном контексте
             try:
                 loop = asyncio.get_event_loop()
+                if loop.is_closed():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
-            # Если loop уже запущен, используем create_task
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, publish_workshop_post_to_channel(post_id))
-                    message_id = future.result(timeout=30)
-            else:
-                # Если loop не запущен, используем run
-                message_id = asyncio.run(publish_workshop_post_to_channel(post_id))
+            # Запускаем асинхронную функцию
+            message_id = loop.run_until_complete(publish_workshop_post_to_channel(post_id))
             
             if message_id:
                 # Отмечаем как опубликованный в БД
@@ -448,11 +526,11 @@ def create_admin_app():
                 
                 return jsonify({'success': True, 'message_id': message_id})
             else:
-                return jsonify({'success': False, 'error': 'Ошибка публикации. Проверьте логи и настройки канала.'}), 500
+                return jsonify({'success': False, 'error': 'Ошибка публикации. Проверьте логи и настройки канала (CHANNEL_ID, права бота).'}), 500
         except Exception as e:
             import traceback
             error_trace = traceback.format_exc()
-            return jsonify({'success': False, 'error': f'{str(e)}\n{error_trace}'}), 500
+            return jsonify({'success': False, 'error': f'{str(e)}'}), 500
     
     @app.route('/admin/workshop/<int:post_id>/delete', methods=['POST'])
     def workshop_delete(post_id):

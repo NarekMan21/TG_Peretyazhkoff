@@ -44,9 +44,23 @@
     </div>
     
     <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Фото (file_id из Telegram, по одному на строку)</label>
-        <textarea name="photos" rows="5" placeholder="file_id1&#10;file_id2&#10;file_id3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace;"></textarea>
-        <small style="color: #666;">Введите file_id фото из Telegram (по одному на строку). Можно получить через бота, отправив фото.</small>
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Фото</label>
+        
+        <!-- Загрузка файлов -->
+        <div style="margin-bottom: 10px; padding: 15px; border: 2px dashed #ddd; border-radius: 4px; background: #f9f9f9;">
+            <input type="file" id="photoUpload" multiple accept="image/*" style="display: none;">
+            <button type="button" onclick="document.getElementById('photoUpload').click()" class="btn" style="background: #3498db; margin-bottom: 10px;">
+                📷 Выбрать фото с компьютера
+            </button>
+            <div id="uploadStatus" style="margin-top: 10px; font-size: 14px; color: #666;"></div>
+            <div id="uploadedFiles" style="margin-top: 10px;"></div>
+        </div>
+        
+        <!-- Поле для file_id (скрыто, заполняется автоматически) -->
+        <textarea name="photos" id="photosField" rows="5" placeholder="file_id1&#10;file_id2&#10;file_id3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; margin-top: 10px;"></textarea>
+        <small style="color: #666; display: block; margin-top: 5px;">
+            Выберите фото выше или введите file_id из Telegram вручную (по одному на строку).
+        </small>
     </div>
     
     <div style="display: flex; gap: 10px;">
@@ -54,4 +68,66 @@
         <a href="/admin/cases" class="btn" style="background: #95a5a6;">Отмена</a>
     </div>
 </form>
+
+<script>
+const photoUpload = document.getElementById('photoUpload');
+const photosField = document.getElementById('photosField');
+const uploadStatus = document.getElementById('uploadStatus');
+const uploadedFiles = document.getElementById('uploadedFiles');
+
+photoUpload.addEventListener('change', async function(e) {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    
+    uploadStatus.innerHTML = '⏳ Загрузка фото...';
+    uploadedFiles.innerHTML = '';
+    
+    const fileIds = [];
+    
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        // Показываем имя файла
+        const fileDiv = document.createElement('div');
+        fileDiv.style.cssText = 'padding: 5px; margin: 5px 0; background: #fff; border-radius: 4px;';
+        fileDiv.innerHTML = `📷 ${file.name} - загрузка...`;
+        uploadedFiles.appendChild(fileDiv);
+        
+        try {
+            const formData = new FormData();
+            formData.append('photo', file);
+            
+            const response = await fetch('/admin/api/upload-photo', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.success && data.file_id) {
+                fileIds.push(data.file_id);
+                fileDiv.innerHTML = `✅ ${file.name} - загружено (file_id: ${data.file_id.substring(0, 20)}...)`;
+                fileDiv.style.color = '#27ae60';
+            } else {
+                fileDiv.innerHTML = `❌ ${file.name} - ошибка: ${data.error || 'Неизвестная ошибка'}`;
+                fileDiv.style.color = '#e74c3c';
+            }
+        } catch (error) {
+            fileDiv.innerHTML = `❌ ${file.name} - ошибка: ${error.message}`;
+            fileDiv.style.color = '#e74c3c';
+        }
+    }
+    
+    // Обновляем поле с file_id
+    const existingIds = photosField.value.split('\\n').filter(id => id.trim());
+    const allIds = [...existingIds, ...fileIds].filter(id => id.trim());
+    photosField.value = allIds.join('\\n');
+    
+    uploadStatus.innerHTML = `✅ Загружено ${fileIds.length} из ${files.length} фото`;
+    uploadStatus.style.color = fileIds.length === files.length ? '#27ae60' : '#e74c3c';
+    
+    // Очищаем input
+    photoUpload.value = '';
+});
+</script>
 {% endblock %}

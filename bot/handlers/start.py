@@ -21,11 +21,22 @@ async def cmd_start(message: Message, state: FSMContext):
     logger = logging.getLogger(__name__)
     logger.info(f"Получена команда /start от пользователя {message.from_user.id}")
     
-    await state.set_state(OrderStates.start)
-    await message.answer(
-        START_MESSAGE,
-        reply_markup=get_main_keyboard()
-    )
+    # Проверяем, есть ли параметр в команде (например, /start calculate)
+    command_parts = message.text.split()
+    if len(command_parts) > 1 and command_parts[1] == "calculate":
+        # Если перешли по кнопке из канала, сразу открываем расчет стоимости
+        await state.set_state(OrderStates.choose_item_type)
+        await message.answer(
+            "Выберите, какую мебель нужно обновить:",
+            reply_markup=get_item_type_keyboard()
+        )
+    else:
+        # Обычный /start - показываем главное меню
+        await state.set_state(OrderStates.start)
+        await message.answer(
+            START_MESSAGE,
+            reply_markup=get_main_keyboard()
+        )
 
 
 @router.message(F.text == "Рассчитать стоимость по фото")

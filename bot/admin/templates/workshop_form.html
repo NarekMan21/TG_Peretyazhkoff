@@ -25,9 +25,22 @@
     </div>
     
     <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 5px; font-weight: bold;">File ID медиа из Telegram</label>
-        <input type="text" name="media_file_id" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace;">
-        <small style="color: #666;">Введите file_id фото или видео из Telegram. Можно получить через бота, отправив медиа.</small>
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Медиа</label>
+        
+        <!-- Загрузка файла -->
+        <div style="margin-bottom: 10px; padding: 15px; border: 2px dashed #ddd; border-radius: 4px; background: #f9f9f9;">
+            <input type="file" id="mediaUpload" accept="image/*,video/*" style="display: none;">
+            <button type="button" onclick="document.getElementById('mediaUpload').click()" class="btn" style="background: #3498db; margin-bottom: 10px;">
+                📎 Выбрать файл с компьютера
+            </button>
+            <div id="uploadStatus" style="margin-top: 10px; font-size: 14px; color: #666;"></div>
+        </div>
+        
+        <!-- Поле для file_id (заполняется автоматически) -->
+        <input type="text" name="media_file_id" id="mediaFileId" placeholder="file_id будет заполнен автоматически" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; margin-top: 10px;">
+        <small style="color: #666; display: block; margin-top: 5px;">
+            Выберите файл выше или введите file_id из Telegram вручную.
+        </small>
     </div>
     
     <div style="display: flex; gap: 10px;">
@@ -35,4 +48,53 @@
         <a href="/admin/workshop" class="btn" style="background: #95a5a6;">Отмена</a>
     </div>
 </form>
+
+<script>
+const mediaUpload = document.getElementById('mediaUpload');
+const mediaFileId = document.getElementById('mediaFileId');
+const uploadStatus = document.getElementById('uploadStatus');
+const mediaTypeSelect = document.querySelector('select[name="media_type"]');
+
+mediaUpload.addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Определяем тип медиа по расширению файла
+    const isVideo = file.type.startsWith('video/');
+    if (isVideo) {
+        mediaTypeSelect.value = 'video';
+    } else {
+        mediaTypeSelect.value = 'photo';
+    }
+    
+    uploadStatus.innerHTML = '⏳ Загрузка файла...';
+    
+    try {
+        const formData = new FormData();
+        formData.append('photo', file); // Используем то же поле, что и для фото
+        
+        const response = await fetch('/admin/api/upload-photo', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.file_id) {
+            mediaFileId.value = data.file_id;
+            uploadStatus.innerHTML = `✅ Файл загружен (file_id: ${data.file_id.substring(0, 30)}...)`;
+            uploadStatus.style.color = '#27ae60';
+        } else {
+            uploadStatus.innerHTML = `❌ Ошибка: ${data.error || 'Неизвестная ошибка'}`;
+            uploadStatus.style.color = '#e74c3c';
+        }
+    } catch (error) {
+        uploadStatus.innerHTML = `❌ Ошибка: ${error.message}`;
+        uploadStatus.style.color = '#e74c3c';
+    }
+    
+    // Очищаем input
+    mediaUpload.value = '';
+});
+</script>
 {% endblock %}

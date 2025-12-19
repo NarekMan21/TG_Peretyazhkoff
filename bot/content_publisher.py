@@ -2,7 +2,7 @@
 import logging
 from typing import Optional, List
 from aiogram import Bot
-from aiogram.types import InputMediaPhoto, InputMediaVideo, FSInputFile
+from aiogram.types import InputMediaPhoto, InputMediaVideo, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest, TelegramAPIError
 
 from config import BOT_TOKEN, CHANNEL_ID
@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 class ContentPublisher:
     """Класс для публикации контента в Telegram-канал"""
     
+    BOT_USERNAME = "peretiazhkoff_bot"  # Username бота без @
+    
     def __init__(self):
         self.bot = Bot(token=BOT_TOKEN)
         self.channel_id = CHANNEL_ID
@@ -21,6 +23,16 @@ class ContentPublisher:
     async def close(self):
         """Закрыть сессию бота"""
         await self.bot.session.close()
+    
+    def _get_calculate_button(self) -> InlineKeyboardMarkup:
+        """Создать inline-клавиатуру с кнопкой 'Рассчитать стоимость по фото'"""
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="Рассчитать стоимость по фото",
+                url=f"https://t.me/{self.BOT_USERNAME}?start=calculate"
+            )]
+        ])
+        return keyboard
     
     async def publish_case(self, case_id: int) -> Optional[int]:
         """Опубликовать кейс в канал
@@ -80,12 +92,37 @@ class ContentPublisher:
                     media=media_group
                 )
                 message_id = messages[0].message_id if messages else None
+                
+                # Добавляем кнопку к первому сообщению медиа-группы
+                if message_id:
+                    try:
+                        # Редактируем caption первого сообщения, добавляя кнопку
+                        await self.bot.edit_message_caption(
+                            chat_id=self.channel_id,
+                            message_id=message_id,
+                            caption=text,
+                            parse_mode='HTML',
+                            reply_markup=self._get_calculate_button()
+                        )
+                    except Exception as e:
+                        logger.warning(f"Не удалось добавить кнопку к медиа-группе: {e}")
+                        # Если не получилось, отправляем отдельное сообщение с кнопкой
+                        try:
+                            await self.bot.send_message(
+                                chat_id=self.channel_id,
+                                text="💬 Хотите рассчитать стоимость?",
+                                reply_markup=self._get_calculate_button(),
+                                reply_to_message_id=message_id
+                            )
+                        except Exception as e2:
+                            logger.error(f"Не удалось отправить сообщение с кнопкой: {e2}")
             else:
                 # Если фото нет, отправляем только текст
                 message = await self.bot.send_message(
                     chat_id=self.channel_id,
                     text=text,
-                    parse_mode='HTML'
+                    parse_mode='HTML',
+                    reply_markup=self._get_calculate_button()
                 )
                 message_id = message.message_id
             
@@ -136,14 +173,16 @@ class ContentPublisher:
                         chat_id=self.channel_id,
                         video=media,
                         caption=text,
-                        parse_mode='HTML'
+                        parse_mode='HTML',
+                        reply_markup=self._get_calculate_button()
                     )
                 else:
                     # Если нет видео, отправляем только текст
                     message = await self.bot.send_message(
                         chat_id=self.channel_id,
                         text=text,
-                        parse_mode='HTML'
+                        parse_mode='HTML',
+                        reply_markup=self._get_calculate_button()
                     )
             else:
                 # Фото по умолчанию
@@ -157,14 +196,16 @@ class ContentPublisher:
                         chat_id=self.channel_id,
                         photo=media,
                         caption=text,
-                        parse_mode='HTML'
+                        parse_mode='HTML',
+                        reply_markup=self._get_calculate_button()
                     )
                 else:
                     # Если нет фото, отправляем только текст
                     message = await self.bot.send_message(
                         chat_id=self.channel_id,
                         text=text,
-                        parse_mode='HTML'
+                        parse_mode='HTML',
+                        reply_markup=self._get_calculate_button()
                     )
             
             logger.info(f"Пост {post_id} успешно опубликован в канал. Message ID: {message.message_id}")
