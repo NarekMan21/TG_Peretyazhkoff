@@ -105,6 +105,19 @@ def create_admin_app():
         if not file_id:
             return "Не указан file_id", 400
         
+        # Проверяем, что это не тестовый file_id
+        if file_id.startswith('file_id') and file_id[7:].isdigit():
+            # Это тестовый file_id типа "file_id1", "file_id2" и т.д.
+            # Возвращаем placeholder изображение
+            from flask import Response
+            placeholder_svg = '''<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+                <rect width="400" height="300" fill="#f0f0f0"/>
+                <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="16" fill="#999">
+                    Фото недоступно (тестовый file_id)
+                </text>
+            </svg>'''
+            return Response(placeholder_svg, mimetype='image/svg+xml')
+        
         try:
             # Декодируем base64 если нужно
             try:
@@ -118,7 +131,16 @@ def create_admin_app():
             file_info = file_info_response.json()
             
             if not file_info.get('ok'):
-                return "Файл не найден", 404
+                error_description = file_info.get('description', 'Неизвестная ошибка')
+                # Возвращаем placeholder при ошибке
+                from flask import Response
+                placeholder_svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+                    <rect width="400" height="300" fill="#f0f0f0"/>
+                    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="14" fill="#999">
+                        Фото недоступно: {error_description}
+                    </text>
+                </svg>'''
+                return Response(placeholder_svg, mimetype='image/svg+xml')
             
             file_path = file_info['result']['file_path']
             
@@ -127,7 +149,14 @@ def create_admin_app():
             file_response = requests.get(file_url, timeout=10)
             
             if file_response.status_code != 200:
-                return "Ошибка загрузки файла", 500
+                from flask import Response
+                placeholder_svg = '''<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+                    <rect width="400" height="300" fill="#f0f0f0"/>
+                    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="14" fill="#999">
+                        Ошибка загрузки файла
+                    </text>
+                </svg>'''
+                return Response(placeholder_svg, mimetype='image/svg+xml')
             
             # Определяем MIME тип
             mime_type = 'image/jpeg'
@@ -145,7 +174,15 @@ def create_admin_app():
                 as_attachment=False
             )
         except Exception as e:
-            return f"Ошибка: {str(e)}", 500
+            # Возвращаем placeholder при любой ошибке
+            from flask import Response
+            placeholder_svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+                <rect width="400" height="300" fill="#f0f0f0"/>
+                <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="12" fill="#999">
+                    Ошибка: {str(e)[:50]}
+                </text>
+            </svg>'''
+            return Response(placeholder_svg, mimetype='image/svg+xml')
     
     @app.route('/admin/api/stats')
     def api_stats():
@@ -266,8 +303,22 @@ def create_admin_app():
     def case_publish(case_id):
         """Опубликовать кейс в канал"""
         try:
-            # Публикуем в канал
-            message_id = asyncio.run(publish_case_to_channel(case_id))
+            # Проверяем, есть ли запущенный event loop
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # Если loop уже запущен, используем create_task
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, publish_case_to_channel(case_id))
+                    message_id = future.result(timeout=30)
+            else:
+                # Если loop не запущен, используем run
+                message_id = asyncio.run(publish_case_to_channel(case_id))
             
             if message_id:
                 # Отмечаем как опубликованный в БД
@@ -281,9 +332,11 @@ def create_admin_app():
                 
                 return jsonify({'success': True, 'message_id': message_id})
             else:
-                return jsonify({'success': False, 'error': 'Ошибка публикации'}), 500
+                return jsonify({'success': False, 'error': 'Ошибка публикации. Проверьте логи и настройки канала.'}), 500
         except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
+            import traceback
+            error_trace = traceback.format_exc()
+            return jsonify({'success': False, 'error': f'{str(e)}\n{error_trace}'}), 500
     
     @app.route('/admin/cases/<int:case_id>/delete', methods=['POST'])
     def case_delete(case_id):
@@ -366,8 +419,22 @@ def create_admin_app():
     def workshop_publish(post_id):
         """Опубликовать пост "из цеха" в канал"""
         try:
-            # Публикуем в канал
-            message_id = asyncio.run(publish_workshop_post_to_channel(post_id))
+            # Проверяем, есть ли запущенный event loop
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # Если loop уже запущен, используем create_task
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, publish_workshop_post_to_channel(post_id))
+                    message_id = future.result(timeout=30)
+            else:
+                # Если loop не запущен, используем run
+                message_id = asyncio.run(publish_workshop_post_to_channel(post_id))
             
             if message_id:
                 # Отмечаем как опубликованный в БД
@@ -381,9 +448,11 @@ def create_admin_app():
                 
                 return jsonify({'success': True, 'message_id': message_id})
             else:
-                return jsonify({'success': False, 'error': 'Ошибка публикации'}), 500
+                return jsonify({'success': False, 'error': 'Ошибка публикации. Проверьте логи и настройки канала.'}), 500
         except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
+            import traceback
+            error_trace = traceback.format_exc()
+            return jsonify({'success': False, 'error': f'{str(e)}\n{error_trace}'}), 500
     
     @app.route('/admin/workshop/<int:post_id>/delete', methods=['POST'])
     def workshop_delete(post_id):
