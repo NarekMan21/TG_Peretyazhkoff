@@ -1,5 +1,6 @@
 """Модуль для публикации контента в Telegram-канал"""
 import logging
+import re
 from typing import Optional, List
 from aiogram import Bot
 from aiogram.types import InputMediaPhoto, InputMediaVideo, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
@@ -9,6 +10,31 @@ from config import BOT_TOKEN, CHANNEL_ID
 from database import get_case, get_workshop_post
 
 logger = logging.getLogger(__name__)
+
+
+def _is_valid_telegram_file_id(file_id: str) -> bool:
+    """Проверить, является ли строка валидным Telegram file_id
+    
+    Валидный file_id обычно начинается с букв и содержит буквы, цифры, дефисы и подчеркивания.
+    Тестовые значения типа "file_id1" не являются валидными.
+    """
+    if not file_id or not isinstance(file_id, str):
+        return False
+    
+    # Тестовые file_id (начинаются с "file_id" и содержат только цифры после)
+    if re.match(r'^file_id\d+$', file_id):
+        return False
+    
+    # Валидный Telegram file_id обычно длинный и содержит буквы
+    # Минимальная длина обычно больше 20 символов
+    if len(file_id) < 20:
+        return False
+    
+    # Должен содержать буквы (не только цифры)
+    if not re.search(r'[a-zA-Z]', file_id):
+        return False
+    
+    return True
 
 
 class ContentPublisher:
@@ -60,62 +86,101 @@ class ContentPublisher:
             if case.get('photos') and len(case['photos']) > 0:
                 media_group = []
                 photos = case['photos']
+                valid_photos = []
                 
-                # Первое фото с текстом
-                if photos[0].startswith('http') or photos[0].startswith('file'):
-                    # Если это URL или путь к файлу
-                    media_group.append(InputMediaPhoto(
-                        media=FSInputFile(photos[0]) if not photos[0].startswith('http') else photos[0],
-                        caption=text,
-                        parse_mode='HTML'
-                    ))
+                # Фильтруем валидные фото
+                for photo in photos:
+                    if not photo or not isinstance(photo, str):
+                        continue
+                    
+                    # Проверяем, является ли это валидным file_id
+                    if photo.startswith('http') or photo.startswith('file://'):
+                        # URL или путь к файлу - добавляем
+                        valid_photos.append(photo)
+                    elif _is_valid_telegram_file_id(photo):
+                        # Валидный Telegram file_id - добавляем
+                        valid_photos.append(photo)
+                    else:
+                        # Невалидный file_id (например, тестовый "file_id1")
+                        logger.warning(f"Пропущен невалидный file_id: {photo[:50]}...")
+                
+                # Если нет валидных фото, отправляем только текст
+                if not valid_photos:
+                    logger.warning(f"Нет валидных фото для кейса {case_id}, отправляем только текст")
+                    message = await self.bot.send_message(
+                        chat_id=self.channel_id,
+                        text=text,
+                        parse_mode='HTML',
+                        reply_markup=self._get_calculate_button()
+                    )
+                    message_id = message.message_id
                 else:
-                    # Если это file_id из Telegram
-                    media_group.append(InputMediaPhoto(
-                        media=photos[0],
-                        caption=text,
-                        parse_mode='HTML'
-                    ))
-                
-                # Остальные фото без текста
-                for photo in photos[1:]:
-                    if photo.startswith('http') or photo.startswith('file'):
+                    # Формируем медиа-группу только из валидных фото
+                    # Первое фото с текстом
+                    if valid_photos[0].startswith('http') or valid_photos[0].startswith('file://'):
                         media_group.append(InputMediaPhoto(
-                            media=FSInputFile(photo) if not photo.startswith('http') else photo
+                            media=FSInputFile(valid_photos[0]) if valid_photos[0].startswith('file://') else valid_photos[0],
+                            caption=text,
+                            parse_mode='HTML'
                         ))
                     else:
-                        media_group.append(InputMediaPhoto(media=photo))
-                
-                # Отправляем медиа-группу
-                messages = await self.bot.send_media_group(
-                    chat_id=self.channel_id,
-                    media=media_group
-                )
-                message_id = messages[0].message_id if messages else None
-                
-                # Добавляем кнопку к первому сообщению медиа-группы
-                if message_id:
-                    try:
-                        # Редактируем caption первого сообщения, добавляя кнопку
-                        await self.bot.edit_message_caption(
-                            chat_id=self.channel_id,
-                            message_id=message_id,
+                        # Если это file_id из Telegram
+                        media_group.append(InputMediaPhoto(
+                            media=valid_photos[0],
                             caption=text,
+                            parse_mode='HTML'
+                        ))
+                    
+                    # Остальные фото без текста
+                    for photo in valid_photos[1:]:
+                        if photo.startswith('http') or photo.startswith('file://'):
+                            media_group.append(InputMediaPhoto(
+                                media=FSInputFile(photo) if photo.startswith('file://') else photo
+                            ))
+                        else:
+                            media_group.append(InputMediaPhoto(media=photo))
+                    
+                    # Отправляем медиа-группу
+                    try:
+                        messages = await self.bot.send_media_group(
+                            chat_id=self.channel_id,
+                            media=media_group
+                        )
+                        message_id = messages[0].message_id if messages else None
+                    except Exception as e:
+                        logger.error(f"Ошибка при отправке медиа-группы для кейса {case_id}: {e}")
+                        # Если не удалось отправить медиа-группу, отправляем только текст
+                        message = await self.bot.send_message(
+                            chat_id=self.channel_id,
+                            text=text,
                             parse_mode='HTML',
                             reply_markup=self._get_calculate_button()
                         )
-                    except Exception as e:
-                        logger.warning(f"Не удалось добавить кнопку к медиа-группе: {e}")
-                        # Если не получилось, отправляем отдельное сообщение с кнопкой
+                        message_id = message.message_id
+                
+                    # Добавляем кнопку к первому сообщению медиа-группы
+                    if message_id:
                         try:
-                            await self.bot.send_message(
+                            # Редактируем caption первого сообщения, добавляя кнопку
+                            await self.bot.edit_message_caption(
                                 chat_id=self.channel_id,
-                                text="💬 Хотите рассчитать стоимость?",
-                                reply_markup=self._get_calculate_button(),
-                                reply_to_message_id=message_id
+                                message_id=message_id,
+                                caption=text,
+                                parse_mode='HTML',
+                                reply_markup=self._get_calculate_button()
                             )
-                        except Exception as e2:
-                            logger.error(f"Не удалось отправить сообщение с кнопкой: {e2}")
+                        except Exception as e:
+                            logger.warning(f"Не удалось добавить кнопку к медиа-группе: {e}")
+                            # Если не получилось, отправляем отдельное сообщение с кнопкой
+                            try:
+                                await self.bot.send_message(
+                                    chat_id=self.channel_id,
+                                    text="💬 Хотите рассчитать стоимость?",
+                                    reply_markup=self._get_calculate_button(),
+                                    reply_to_message_id=message_id
+                                )
+                            except Exception as e2:
+                                logger.error(f"Не удалось отправить сообщение с кнопкой: {e2}")
             else:
                 # Если фото нет, отправляем только текст
                 message = await self.bot.send_message(
@@ -162,20 +227,36 @@ class ContentPublisher:
             text = self._format_workshop_post_text(post)
             
             # Отправляем в зависимости от типа медиа
+            media_file_id = post.get('media_file_id', '')
+            
+            # Проверяем валидность file_id
+            if media_file_id and not _is_valid_telegram_file_id(media_file_id) and not (media_file_id.startswith('http') or media_file_id.startswith('file://')):
+                logger.warning(f"Невалидный file_id для поста {post_id}: {media_file_id[:50]}... Отправляем только текст.")
+                media_file_id = None
+            
             if post['media_type'] == 'video':
-                if post['media_file_id']:
-                    if post['media_file_id'].startswith('http') or post['media_file_id'].startswith('file'):
-                        media = FSInputFile(post['media_file_id']) if not post['media_file_id'].startswith('http') else post['media_file_id']
-                    else:
-                        media = post['media_file_id']
-                    
-                    message = await self.bot.send_video(
-                        chat_id=self.channel_id,
-                        video=media,
-                        caption=text,
-                        parse_mode='HTML',
-                        reply_markup=self._get_calculate_button()
-                    )
+                if media_file_id:
+                    try:
+                        if media_file_id.startswith('http') or media_file_id.startswith('file://'):
+                            media = FSInputFile(media_file_id) if media_file_id.startswith('file://') else media_file_id
+                        else:
+                            media = media_file_id
+                        
+                        message = await self.bot.send_video(
+                            chat_id=self.channel_id,
+                            video=media,
+                            caption=text,
+                            parse_mode='HTML',
+                            reply_markup=self._get_calculate_button()
+                        )
+                    except Exception as e:
+                        logger.error(f"Ошибка при отправке видео для поста {post_id}: {e}. Отправляем только текст.")
+                        message = await self.bot.send_message(
+                            chat_id=self.channel_id,
+                            text=text,
+                            parse_mode='HTML',
+                            reply_markup=self._get_calculate_button()
+                        )
                 else:
                     # Если нет видео, отправляем только текст
                     message = await self.bot.send_message(
@@ -186,19 +267,28 @@ class ContentPublisher:
                     )
             else:
                 # Фото по умолчанию
-                if post['media_file_id']:
-                    if post['media_file_id'].startswith('http') or post['media_file_id'].startswith('file'):
-                        media = FSInputFile(post['media_file_id']) if not post['media_file_id'].startswith('http') else post['media_file_id']
-                    else:
-                        media = post['media_file_id']
-                    
-                    message = await self.bot.send_photo(
-                        chat_id=self.channel_id,
-                        photo=media,
-                        caption=text,
-                        parse_mode='HTML',
-                        reply_markup=self._get_calculate_button()
-                    )
+                if media_file_id:
+                    try:
+                        if media_file_id.startswith('http') or media_file_id.startswith('file://'):
+                            media = FSInputFile(media_file_id) if media_file_id.startswith('file://') else media_file_id
+                        else:
+                            media = media_file_id
+                        
+                        message = await self.bot.send_photo(
+                            chat_id=self.channel_id,
+                            photo=media,
+                            caption=text,
+                            parse_mode='HTML',
+                            reply_markup=self._get_calculate_button()
+                        )
+                    except Exception as e:
+                        logger.error(f"Ошибка при отправке фото для поста {post_id}: {e}. Отправляем только текст.")
+                        message = await self.bot.send_message(
+                            chat_id=self.channel_id,
+                            text=text,
+                            parse_mode='HTML',
+                            reply_markup=self._get_calculate_button()
+                        )
                 else:
                     # Если нет фото, отправляем только текст
                     message = await self.bot.send_message(

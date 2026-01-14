@@ -59,3 +59,15 @@ def get_back_keyboard() -> ReplyKeyboardMarkup:
     )
     return keyboard
 
+# Клавиатура после получения фото
+def get_continue_after_photos_keyboard() -> ReplyKeyboardMarkup:
+    """Клавиатура для продолжения после отправки фото"""
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="✅ Готово, перейти дальше")],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Отправьте ещё фото или нажмите кнопку"
+    )
+    return keyboard
+

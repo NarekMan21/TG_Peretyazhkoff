@@ -9,7 +9,7 @@ from messages import (
     ASK_PHOTOS, ASK_DISTRICT, ASK_PHONE, get_price_message,
     PREMIUM_PROOF, LEAD_SAVED, ERROR_INVALID_PHONE, ERROR_NO_PHOTOS
 )
-from keyboards import get_item_type_keyboard, get_after_lead_keyboard
+from keyboards import get_item_type_keyboard, get_after_lead_keyboard, get_continue_after_photos_keyboard
 from database import save_lead
 from utils import validate_phone, normalize_phone
 import sys
@@ -67,9 +67,30 @@ async def process_photos(message: Message, state: FSMContext):
     
     # Если это первое фото, подтверждаем получение
     if len(photos) == 1:
-        await message.answer("✅ Фото получено. Можете отправить ещё фото или перейти к следующему шагу.")
+        await message.answer(
+            "✅ Фото получено. Можете отправить ещё фото или нажмите кнопку ниже для перехода к следующему шагу.",
+            reply_markup=get_continue_after_photos_keyboard()
+        )
     else:
-        await message.answer(f"✅ Получено {len(photos)} фото. Можете отправить ещё или перейти к следующему шагу.")
+        await message.answer(
+            f"✅ Получено {len(photos)} фото. Можете отправить ещё или нажмите кнопку ниже для перехода к следующему шагу.",
+            reply_markup=get_continue_after_photos_keyboard()
+        )
+
+
+@router.message(OrderStates.ask_photos, F.text == "✅ Готово, перейти дальше")
+async def continue_after_photos(message: Message, state: FSMContext):
+    """Обработка нажатия кнопки продолжения"""
+    data = await state.get_data()
+    photos = data.get("photos", [])
+    
+    if not photos:
+        await message.answer(ERROR_NO_PHOTOS)
+        return
+    
+    # Переходим к следующему шагу
+    await state.set_state(OrderStates.ask_district)
+    await message.answer(ASK_DISTRICT)
 
 
 @router.message(OrderStates.ask_photos)
