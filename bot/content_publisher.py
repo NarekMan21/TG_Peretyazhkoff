@@ -274,13 +274,78 @@ class ContentPublisher:
                         else:
                             media = media_file_id
                         
-                        message = await self.bot.send_photo(
-                            chat_id=self.channel_id,
-                            photo=media,
-                            caption=text,
-                            parse_mode='HTML',
-                            reply_markup=self._get_calculate_button()
-                        )
+                        # Telegram ограничивает длину подписи к фото до 1024 символов
+                        MAX_CAPTION_LENGTH = 1024
+                        
+                        if len(text) > MAX_CAPTION_LENGTH:
+                            # Если текст слишком длинный, отправляем фото без подписи или с короткой подписью
+                            # Обрезаем текст до 1020 символов и добавляем "..."
+                            short_caption = text[:MAX_CAPTION_LENGTH - 3] + "..."
+                            
+                            # Отправляем фото с короткой подписью
+                            photo_message = await self.bot.send_photo(
+                                chat_id=self.channel_id,
+                                photo=media,
+                                caption=short_caption,
+                                parse_mode='HTML',
+                                reply_markup=self._get_calculate_button()
+                            )
+                            
+                            # Отправляем полный текст отдельным сообщением
+                            await self.bot.send_message(
+                                chat_id=self.channel_id,
+                                text=text,
+                                parse_mode='HTML',
+                                reply_to_message_id=photo_message.message_id
+                            )
+                            
+                            message = photo_message
+                        else:
+                            # Текст помещается в подпись
+                            message = await self.bot.send_photo(
+                                chat_id=self.channel_id,
+                                photo=media,
+                                caption=text,
+                                parse_mode='HTML',
+                                reply_markup=self._get_calculate_button()
+                            )
+                    except TelegramBadRequest as e:
+                        # Если ошибка из-за длинной подписи, отправляем фото без подписи и текст отдельно
+                        if "caption is too long" in str(e).lower():
+                            logger.warning(f"Подпись слишком длинная для поста {post_id}. Отправляем фото без подписи и текст отдельно.")
+                            try:
+                                # Отправляем фото без подписи
+                                photo_message = await self.bot.send_photo(
+                                    chat_id=self.channel_id,
+                                    photo=media,
+                                    reply_markup=self._get_calculate_button()
+                                )
+                                
+                                # Отправляем текст отдельным сообщением
+                                await self.bot.send_message(
+                                    chat_id=self.channel_id,
+                                    text=text,
+                                    parse_mode='HTML',
+                                    reply_to_message_id=photo_message.message_id
+                                )
+                                
+                                message = photo_message
+                            except Exception as e2:
+                                logger.error(f"Ошибка при отправке фото без подписи для поста {post_id}: {e2}. Отправляем только текст.")
+                                message = await self.bot.send_message(
+                                    chat_id=self.channel_id,
+                                    text=text,
+                                    parse_mode='HTML',
+                                    reply_markup=self._get_calculate_button()
+                                )
+                        else:
+                            logger.error(f"Ошибка при отправке фото для поста {post_id}: {e}. Отправляем только текст.")
+                            message = await self.bot.send_message(
+                                chat_id=self.channel_id,
+                                text=text,
+                                parse_mode='HTML',
+                                reply_markup=self._get_calculate_button()
+                            )
                     except Exception as e:
                         logger.error(f"Ошибка при отправке фото для поста {post_id}: {e}. Отправляем только текст.")
                         message = await self.bot.send_message(
@@ -362,7 +427,7 @@ class ContentPublisher:
             text_parts.append(post['description'])
         
         # Хештеги
-        text_parts.append("\n#Перетяжкофф #ИзЦеха #Производство")
+        text_parts.append("\n#Перетяжкофф #Перетяжка")
         
         return "\n".join(text_parts)
 

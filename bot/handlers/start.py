@@ -1,87 +1,89 @@
-"""Обработчик команды /start и главного меню"""
-from aiogram import Router, F
-from aiogram.types import Message
+"""Обработчик команды /start - упрощенная версия"""
+from aiogram import Router, F, Bot
+from aiogram.types import Message, InputMediaPhoto
 from aiogram.fsm.context import FSMContext
+from datetime import datetime
+import logging
 
-from states import OrderStates
-from messages import START_MESSAGE, SHOW_PORTFOLIO, SHOW_ADDRESS, SHOW_PHONE
-from keyboards import (
-    get_main_keyboard,
-    get_item_type_keyboard,
-    get_back_keyboard
-)
+from messages import START_MESSAGE, format_lead_for_manager
+from keyboards import get_main_keyboard
+from database import save_lead
+from config import MANAGER_CHAT_ID
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
-@router.message(F.text == "/start")
-async def cmd_start(message: Message, state: FSMContext):
-    """Обработчик команды /start"""
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"Получена команда /start от пользователя {message.from_user.id}")
+@router.message(F.text.startswith("/start"))
+async def cmd_start(message: Message, state: FSMContext, bot: Bot):
+    """Обработчик команды /start - обрабатывает обычный /start и deep linking"""
+    # Очищаем состояние
+    await state.clear()
     
-    # Проверяем, есть ли параметр в команде (например, /start calculate)
-    command_parts = message.text.split()
-    if len(command_parts) > 1 and command_parts[1] == "calculate":
-        # Если перешли по кнопке из канала, сразу открываем расчет стоимости
-        await state.set_state(OrderStates.choose_item_type)
-        await message.answer(
-            "Выберите, какую мебель нужно обновить:",
-            reply_markup=get_item_type_keyboard()
-        )
+    # Парсим параметры из команды /start (например, /start calculate или /start?calculate)
+    command_text = message.text
+    start_param = None
+    
+    # Обрабатываем формат /start параметр или /start?параметр
+    if " " in command_text:
+        # Формат: /start calculate
+        parts = command_text.split(maxsplit=1)
+        if len(parts) > 1:
+            start_param = parts[1].strip()
+    elif "?" in command_text:
+        # Формат: /start?calculate (редко используется в Telegram, но на всякий случай)
+        parts = command_text.split("?", 1)
+        if len(parts) > 1:
+            start_param = parts[1].strip()
+    
+    username = message.from_user.username
+    user_id = message.from_user.id
+    first_name = message.from_user.first_name
+    last_name = message.from_user.last_name
+    
+    # Формируем текст заявки в зависимости от наличия параметра
+    if start_param:
+        source_text = f"Пользователь перешел в бота по ссылке (параметр: {start_param})"
+        logger.info(f"Получена команда /start с параметром '{start_param}' от пользователя {user_id}")
     else:
-        # Обычный /start - показываем главное меню
-        await state.set_state(OrderStates.start)
-        await message.answer(
-            START_MESSAGE,
-            reply_markup=get_main_keyboard()
+        source_text = "Пользователь перешел в бота через /start"
+        logger.info(f"Получена команда /start от пользователя {user_id}")
+    
+    # Пытаемся сохранить заявку в БД
+    lead_id = None
+    try:
+        lead_id = await save_lead(
+            telegram_user_id=user_id,
+            username=username,
+            message_text=source_text
         )
-
-
-@router.message(F.text == "Рассчитать стоимость по фото")
-async def start_calculation(message: Message, state: FSMContext):
-    """Начать расчет стоимости"""
-    await state.set_state(OrderStates.choose_item_type)
-    await message.answer(
-        "Выберите, какую мебель нужно обновить:",
-        reply_markup=get_item_type_keyboard()
-    )
-
-
-@router.message(F.text == "Примеры работ")
-async def show_portfolio(message: Message, state: FSMContext):
-    """Показать примеры работ"""
-    await message.answer(
-        SHOW_PORTFOLIO,
-        reply_markup=get_back_keyboard()
-    )
-
-
-@router.message(F.text == "Наш адрес и режим работы")
-async def show_address(message: Message, state: FSMContext):
-    """Показать адрес и режим работы"""
-    await message.answer(
-        SHOW_ADDRESS,
-        reply_markup=get_back_keyboard()
-    )
-
-
-@router.message(F.text == "Позвонить менеджеру")
-async def show_phone(message: Message, state: FSMContext):
-    """Показать телефон менеджера"""
-    await message.answer(
-        SHOW_PHONE,
-        reply_markup=get_back_keyboard()
-    )
-
-
-@router.message(F.text == "Назад")
-async def back_to_main(message: Message, state: FSMContext):
-    """Вернуться в главное меню"""
-    await state.set_state(OrderStates.start)
+        logger.info(f"Создана заявка #{lead_id} от пользователя {user_id}")
+    except Exception as e:
+        logger.error(f"Ошибка при сохранении заявки в БД: {e}")
+    
+    # Отправляем заявку менеджеру (даже если сохранение в БД не удалось)
+    try:
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        manager_message = format_lead_for_manager(
+            username=username,
+            user_id=user_id,
+            first_name=first_name,
+            last_name=last_name,
+            message_text=source_text,
+            created_at=created_at,
+            photo_count=0
+        )
+        
+        await bot.send_message(
+            chat_id=MANAGER_CHAT_ID,
+            text=manager_message
+        )
+        logger.info(f"Заявка отправлена менеджеру от пользователя {user_id}")
+    except Exception as e:
+        logger.error(f"Ошибка при отправке заявки менеджеру: {e}")
+    
+    # Показываем приветствие
     await message.answer(
         START_MESSAGE,
         reply_markup=get_main_keyboard()
     )
-

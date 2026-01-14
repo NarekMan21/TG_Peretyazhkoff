@@ -13,16 +13,81 @@ from config import DB_PATH
 async def init_db():
     """Инициализация базы данных - создание таблиц"""
     async with aiosqlite.connect(DB_PATH) as db:
-        # Таблица заявок
+        # Проверяем существующую схему таблицы leads
+        needs_migration = False
+        try:
+            async with db.execute("PRAGMA table_info(leads)") as cursor:
+                columns_info = await cursor.fetchall()
+                if columns_info:
+                    # Проверяем, есть ли колонка message_text и какие ограничения NOT NULL есть
+                    column_names = [row[1] for row in columns_info]
+                    if 'message_text' not in column_names:
+                        needs_migration = True
+                    # Проверяем NOT NULL ограничения для item_type, district, phone
+                    for col_info in columns_info:
+                        col_name = col_info[1]
+                        not_null = col_info[3]  # 3-й элемент - NOT NULL флаг
+                        if col_name in ['item_type', 'district', 'phone'] and not_null:
+                            needs_migration = True
+                            break
+        except Exception:
+            # Таблица не существует или ошибка - создадим новую
+            pass
+        
+        # Если нужна миграция, пересоздаем таблицу
+        if needs_migration:
+            try:
+                # Создаем временную таблицу с правильной схемой
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS leads_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        telegram_user_id INTEGER NOT NULL,
+                        username TEXT,
+                        item_type TEXT,
+                        district TEXT,
+                        phone TEXT,
+                        photos TEXT,
+                        message_text TEXT,
+                        created_at TEXT NOT NULL,
+                        source TEXT DEFAULT 'TelegramBot_Peretiazhkoff'
+                    )
+                """)
+                
+                # Копируем данные из старой таблицы (если она существует)
+                try:
+                    await db.execute("""
+                        INSERT INTO leads_new 
+                        (id, telegram_user_id, username, item_type, district, phone, photos, created_at, source)
+                        SELECT id, telegram_user_id, username, item_type, district, phone, photos, created_at, source
+                        FROM leads
+                    """)
+                except Exception:
+                    # Если ошибка при копировании - просто продолжаем с пустой таблицей
+                    pass
+                
+                # Удаляем старую таблицу
+                await db.execute("DROP TABLE IF EXISTS leads")
+                
+                # Переименовываем новую таблицу
+                await db.execute("ALTER TABLE leads_new RENAME TO leads")
+                
+                await db.commit()
+            except Exception as e:
+                # Если миграция не удалась, создадим таблицу заново
+                await db.execute("DROP TABLE IF EXISTS leads")
+                await db.execute("DROP TABLE IF EXISTS leads_new")
+        
+        # Создаем таблицу с правильной схемой (если её еще нет)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS leads (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 telegram_user_id INTEGER NOT NULL,
                 username TEXT,
-                item_type TEXT NOT NULL,
-                district TEXT NOT NULL,
-                phone TEXT NOT NULL,
-                photos TEXT NOT NULL,
+                item_type TEXT,
+                district TEXT,
+                phone TEXT,
+                photos TEXT,
+                message_text TEXT,
                 created_at TEXT NOT NULL,
                 source TEXT DEFAULT 'TelegramBot_Peretiazhkoff'
             )
@@ -86,28 +151,29 @@ async def init_db():
 async def save_lead(
     telegram_user_id: int,
     username: Optional[str],
-    item_type: str,
-    district: str,
-    phone: str,
-    photos: List[str]
+    item_type: Optional[str] = None,
+    district: Optional[str] = None,
+    phone: Optional[str] = None,
+    photos: Optional[List[str]] = None,
+    message_text: Optional[str] = None
 ) -> int:
-    """Сохранить заявку в базу данных
+    """Сохранить заявку в базу данных (упрощенная версия - все поля опциональны)
     
     Returns:
         int: ID сохраненной заявки
     """
     async with aiosqlite.connect(DB_PATH) as db:
-        photos_json = json.dumps(photos)
+        photos_json = json.dumps(photos or [])
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         cursor = await db.execute("""
             INSERT INTO leads (
                 telegram_user_id, username, item_type, district, 
-                phone, photos, created_at, source
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                phone, photos, message_text, created_at, source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             telegram_user_id, username, item_type, district,
-            phone, photos_json, created_at, "TelegramBot_Peretiazhkoff"
+            phone, photos_json, message_text, created_at, "TelegramBot_Peretiazhkoff"
         ))
         
         await db.commit()
@@ -124,7 +190,7 @@ async def get_lead(lead_id: int) -> Optional[Dict]:
             row = await cursor.fetchone()
             if row:
                 lead = dict(row)
-                lead['photos'] = json.loads(lead['photos'])
+                lead['photos'] = json.loads(lead['photos']) if lead['photos'] else []
                 return lead
             return None
 
@@ -142,7 +208,7 @@ async def get_all_leads(limit: int = 100, offset: int = 0) -> List[Dict]:
             leads = []
             for row in rows:
                 lead = dict(row)
-                lead['photos'] = json.loads(lead['photos'])
+                lead['photos'] = json.loads(lead['photos']) if lead['photos'] else []
                 leads.append(lead)
             return leads
 
@@ -161,6 +227,7 @@ async def get_leads_by_item_type() -> Dict[str, int]:
         async with db.execute("""
             SELECT item_type, COUNT(*) as count 
             FROM leads 
+            WHERE item_type IS NOT NULL
             GROUP BY item_type
         """) as cursor:
             rows = await cursor.fetchall()
@@ -435,4 +502,3 @@ async def delete_workshop_post(post_id: int) -> bool:
         await db.execute("DELETE FROM workshop_posts WHERE id = ?", (post_id,))
         await db.commit()
         return True
-
