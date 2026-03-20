@@ -47,3 +47,12 @@ python main.py
 - Do **not** commit real bot tokens or private chat IDs
 - Keep secrets only in `.env` or your deployment platform secrets
 - If a token was ever exposed publicly, revoke it in BotFather and issue a new one
+
+## Screenshots
+Add 1-3 screenshots in `docs/images/` and embed them like this:
+
+```md
+![Overview](docs/images/overview.png)
+![Dashboard](docs/images/dashboard.png)
+```
+
