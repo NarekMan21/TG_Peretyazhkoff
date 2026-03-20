@@ -6,29 +6,25 @@
 pip install -r requirements.txt
 ```
 
-## 2. Бот уже создан
+## 2. Создание Telegram-бота
 
-✅ Бот создан и настроен:
-- Username: @peretiazhkoff_bot
-- Токен: `REMOVED_TELEGRAM_BOT_TOKEN`
+Создайте бота через `@BotFather` и сохраните токен в `.env`.
 
-## 3. Группа настроена
+## 3. Подготовка чата менеджеров
 
-✅ ID группы: `-5007917864`
-- Ссылка: https://web.telegram.org/a/#-5007917864
+Добавьте бота в нужный чат или группу и получите `chat_id`.
 
-## 4. Создание .env файла
+## 4. Создание `.env`
 
 Создайте файл `.env` в директории `bot/`:
 
 ```env
-BOT_TOKEN=REMOVED_TELEGRAM_BOT_TOKEN
-MANAGER_CHAT_ID=-5007917864
+BOT_TOKEN=your_bot_token
+MANAGER_CHAT_ID=your_manager_chat_id
+CHANNEL_ID=@your_channel_username
 ADMIN_PORT=5000
 DB_PATH=bot.db
 ```
-
-⚠️ **Важно:** Файл `.env` не должен попадать в git (уже в .gitignore)
 
 ## 5. Запуск
 
@@ -36,20 +32,13 @@ DB_PATH=bot.db
 python main.py
 ```
 
-Бот запустится и будет готов к работе!
-
-### Админ-панель
+## Админ-панель
 
 После запуска откройте в браузере:
-- **http://localhost:5000/admin** - список заявок
-- **http://localhost:5000/admin/lead/<id>** - детали заявки
+- `http://localhost:5000/admin` — список заявок
+- `http://localhost:5000/admin/lead/<id>` — детали заявки
 
-**Важно:** Админ-панель работает только когда бот запущен!
+## Важно
 
-### Проверка работы
-
-1. Отправьте `/start` боту в Telegram
-2. Пройдите процесс оформления заявки
-3. Проверьте, что заявка появилась в админ-панели
-4. Проверьте, что заявка пришла в группу менеджеров
-
+- Не коммитьте реальные токены и chat IDs
+- Если токен уже был опубликован, перевыпустите его через BotFather
