@@ -1,284 +1,49 @@
-# Telegram бот для Перетяжкофф
+# Telegram bot for furniture reupholstery leads
 
-Telegram-бот для сбора заявок на перетяжку мебели с веб-админ-панелью для просмотра заявок.
+Telegram bot + lightweight admin panel for collecting, reviewing, and managing furniture reupholstery requests.
 
-## Возможности
+## What it does
+- Collects lead data through a guided Telegram flow
+- Supports 1–10 furniture photos per request
+- Normalizes phone numbers before saving
+- Sends completed requests to a manager chat in Telegram
+- Stores requests in SQLite
+- Provides a web admin panel for browsing requests and stats
+- Can publish content/case posts to a Telegram channel
 
-- ✅ Полный FSM-флоу сбора заявок (тип мебели → фото → район → телефон)
-- ✅ Корректная обработка выбора типа мебели через кнопки клавиатуры
-- ✅ Обработка фото мебели (1-10 фото)
-- ✅ Валидация и нормализация телефонов
-- ✅ Автоматическая отправка заявок менеджеру в Telegram
-- ✅ Веб-админ-панель для просмотра всех заявок
-- ✅ **Отображение фото в админ-панели** (загрузка через Telegram Bot API)
-- ✅ Статистика по типам мебели
-- ✅ Хранение данных в SQLite
-- ✅ **Контент-маркетинг: автоматическая публикация кейсов в канал**
-- ✅ **Посты "из цеха": публикация фото/видео с производством**
+## Main flow
+1. User starts the bot
+2. Selects furniture type
+3. Uploads photos
+4. Shares district / location
+5. Shares phone number
+6. Request is stored and forwarded to the manager
 
-## Установка
+## Stack
+- Python
+- aiogram
+- SQLite
+- Telegram Bot API
+- Web admin panel
 
-### 1. Клонирование и настройка окружения
-
-**⚠️ Требования:**
-- Python 3.11, 3.12 или 3.13 (все версии поддерживаются)
-- Для Python 3.13 используется aiogram 3.23.0 с готовыми wheels
-
-```bash
-# Перейти в директорию проекта
-cd bot
-
-# Создать виртуальное окружение (рекомендуется)
-python -m venv venv
-
-# Активировать виртуальное окружение
-# Windows:
-venv\Scripts\activate
-# Linux/Mac:
-source venv/bin/activate
-
-# Обновить pip и установщики
-pip install --upgrade pip setuptools wheel
-
-# Установить зависимости
-pip install -r requirements.txt
-```
-
-**Если возникают ошибки:**
-1. Обновите pip: `pip install --upgrade pip setuptools wheel`
-2. Убедитесь, что используете актуальную версию aiogram (>=3.20.0)
-3. Для Python 3.13 все зависимости доступны в виде готовых wheels
-
-### 2. Создание бота через @BotFather
-
-✅ **Бот уже создан!**
-
-- **Имя бота:** Перетяжкофф | Перетяжка мебели Ростов-на-Дону
-- **Username:** @peretiazhkoff_bot
-- **Токен:** `REMOVED_TELEGRAM_BOT_TOKEN`
-
-⚠️ **Важно:** Токен бота - это секретная информация. Не публикуйте его в открытом доступе и не коммитьте в git!
-
-### 3. Получение ID чата менеджера
-
-✅ **Группа уже настроена!**
-
-- **ID группы:** `-5007917864`
-- **Ссылка на группу:** https://web.telegram.org/a/#-5007917864
-
-**Как получить ID группы (для справки):**
-1. Добавьте бота в группу
-2. Отправьте сообщение в группе
-3. Перейдите по ссылке: `https://api.telegram.org/bot<TOKEN>/getUpdates`
-4. Найдите `"chat":{"id":-5007917864}` - это ID группы (отрицательное число)
-
-### 4. Настройка конфигурации
-
-Создайте файл `.env` в директории `bot/`:
+## Setup
+Create a `.env` file in the bot directory:
 
 ```env
-BOT_TOKEN=REMOVED_TELEGRAM_BOT_TOKEN
-MANAGER_CHAT_ID=-5007917864
+BOT_TOKEN=your_bot_token
+MANAGER_CHAT_ID=your_manager_chat_id
 CHANNEL_ID=@your_channel_username
 ADMIN_PORT=5000
 DB_PATH=bot.db
 ```
 
-**Для контент-маркетинга:**
-- `CHANNEL_ID` - ID Telegram-канала для публикации кейсов и постов "из цеха"
-  - Для публичного канала: `@channel_username`
-  - Для приватного канала: `-1001234567890` (числовой ID)
-  - Бот должен быть добавлен в канал как администратор
-
-⚠️ **Безопасность:** Файл `.env` уже добавлен в `.gitignore` и не будет закоммичен в git. Никогда не публикуйте токен бота!
-
-## Запуск
-
+## Run locally
 ```bash
-# Из директории bot/
+pip install -r requirements.txt
 python main.py
 ```
 
-Бот запустится и будет готов к работе. Вы увидите в консоли:
-```
-Инициализация базы данных...
-Бот запущен и готов к работе!
-Админ-панель запущена на http://localhost:5000/admin
-```
-
-### Доступ к админ-панели
-
-После запуска бота откройте в браузере:
-- **http://localhost:5000/admin** - список всех заявок
-- **http://localhost:5000/admin/lead/<id>** - детальная информация о заявке
-
-**Важно:** Админ-панель работает только когда бот запущен. Если бот остановлен, панель будет недоступна.
-
-## Структура проекта
-
-```
-bot/
-├── main.py              # Точка входа
-├── config.py            # Конфигурация
-├── database.py          # Работа с БД
-├── messages.py          # Тексты сообщений
-├── keyboards.py         # Клавиатуры
-├── states.py            # FSM состояния
-├── utils.py             # Утилиты
-├── handlers/            # Обработчики
-│   ├── start.py         # Команда /start и главное меню
-│   ├── common.py       # Общие обработчики
-│   ├── order.py         # Обработка заявок (FSM)
-│   └── fallback.py      # Fallback для необработанных сообщений
-└── admin/               # Админ-панель
-    ├── app.py
-    └── templates/
-```
-
-## Использование
-
-### Для клиентов
-
-1. Найти бота в Telegram по username
-2. Отправить `/start`
-3. Нажать "Рассчитать стоимость по фото"
-4. Выбрать тип мебели
-5. Отправить 2-4 фото мебели
-6. Указать район
-7. Указать телефон
-8. Получить подтверждение и ожидать звонка менеджера
-
-### Для менеджеров
-
-1. Заявки автоматически приходят в указанный Telegram-чат
-2. Просмотр всех заявок в веб-админ-панели: http://localhost:5000/admin
-3. Детальный просмотр заявки с **отображением фото** (загружаются через Telegram Bot API)
-4. Клик по фото для просмотра в полном размере
-
-### Контент-маркетинг
-
-1. **Кейсы** - создание и публикация историй диванов:
-   - http://localhost:5000/admin/cases - список кейсов
-   - http://localhost:5000/admin/cases/new - создать новый кейс
-   - Автоматическая публикация в Telegram-канал с фото и описанием
-
-2. **Посты "из цеха"** - публикация фото/видео с производством:
-   - http://localhost:5000/admin/workshop - список постов
-   - http://localhost:5000/admin/workshop/new - создать новый пост
-   - Автоматическая публикация в Telegram-канал
-
-Подробнее см. [CONTENT_MARKETING.md](CONTENT_MARKETING.md)
-
-## Разработка
-
-### Зависимости
-
-- `aiogram>=3.20.0` - фреймворк для Telegram бота (установлена версия 3.23.0, поддерживает Python 3.13)
-- `aiosqlite>=0.19.0` - асинхронная работа с SQLite
-- `python-dotenv>=1.0.0` - загрузка переменных окружения
-- `flask>=3.0.0` - веб-фреймворк для админ-панели
-- `aiofiles>=23.2.0` - асинхронная работа с файлами
-
-Все зависимости совместимы с Python 3.11, 3.12 и 3.13.
-
-### Логирование
-
-Все логи выводятся в консоль с уровнем INFO. Для отладки можно изменить уровень в `main.py`:
-
-```python
-logging.basicConfig(level=logging.DEBUG)
-```
-
-### Архитектура обработчиков
-
-Обработчики регистрируются в следующем порядке (важен для правильной работы):
-
-1. **start.router** - команда `/start` и главное меню
-2. **common.router** - общие обработчики (команды, помощь)
-3. **order.router** - обработка заявок с FSM состояниями
-4. **fallback.router** - обработчик для необработанных сообщений (последний)
-
-**Важно:** Fallback роутер должен быть зарегистрирован последним, чтобы не перехватывать сообщения, которые должны обрабатываться специфичными обработчиками с фильтрами состояний.
-
-## Деплой на сервер
-
-### Использование systemd (Linux)
-
-Создайте файл `/etc/systemd/system/peretiazhkoff-bot.service`:
-
-```ini
-[Unit]
-Description=Telegram Bot Peretiazhkoff
-After=network.target
-
-[Service]
-Type=simple
-User=your_user
-WorkingDirectory=/path/to/bot
-Environment="PATH=/path/to/venv/bin"
-ExecStart=/path/to/venv/bin/python main.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Затем:
-```bash
-sudo systemctl enable peretiazhkoff-bot
-sudo systemctl start peretiazhkoff-bot
-```
-
-### Использование supervisor
-
-Создайте файл `/etc/supervisor/conf.d/peretiazhkoff-bot.conf`:
-
-```ini
-[program:peretiazhkoff-bot]
-command=/path/to/venv/bin/python /path/to/bot/main.py
-directory=/path/to/bot
-user=your_user
-autostart=true
-autorestart=true
-stderr_logfile=/var/log/peretiazhkoff-bot.err.log
-stdout_logfile=/var/log/peretiazhkoff-bot.out.log
-```
-
-## Безопасность
-
-- ⚠️ **НЕ коммитьте** файл `.env` в git (уже добавлен в `.gitignore`)
-- ⚠️ **НЕ публикуйте** токен бота в открытом доступе
-- ⚠️ Токен бота дает полный контроль над ботом - храните его в секрете
-- ⚠️ Если токен скомпрометирован, немедленно отзовите его через @BotFather (кнопка "Revoke")
-- ⚠️ Для продакшена рекомендуется добавить авторизацию в админ-панели
-- ⚠️ Используйте переменные окружения на сервере вместо `.env` файла
-
-## Поддержка
-
-При возникновении проблем проверьте:
-1. Правильность токена бота в `.env`
-2. Правильность ID чата менеджера
-3. Доступность интернета для бота
-4. Логи в консоли
-
-### Известные проблемы и исправления
-
-✅ **Исправлено: Проблема с выбором типа мебели**
-- Проблема: При выборе типа мебели бот отвечал "Пожалуйста, следуйте инструкциям бота" и не переходил к следующему шагу
-- Причина: Fallback обработчик перехватывал сообщения раньше, чем обработчик с фильтром состояния
-- Решение: Fallback обработчик теперь исключает состояние `choose_item_type` с помощью фильтра `~StateFilter(OrderStates.choose_item_type)`
-- Статус: ✅ Исправлено и протестировано
-
-### Документация
-
-- [README.md](README.md) - основная документация
-- [CONTENT_MARKETING.md](CONTENT_MARKETING.md) - контент-маркетинг и публикация в канал
-- [DEPLOYMENT.md](DEPLOYMENT.md) - развертывание на сервере
-- [PROJECT_STATUS.md](PROJECT_STATUS.md) - статус проекта
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - решение проблем
-- [CHANNEL_SETUP.md](CHANNEL_SETUP.md) - настройка Telegram-канала
-
-## Лицензия
-
-Проект создан для компании Перетяжкофф.
-
+## Notes
+- Do **not** commit real bot tokens or private chat IDs
+- Keep secrets only in `.env` or your deployment platform secrets
+- If a token was ever exposed publicly, revoke it in BotFather and issue a new one
